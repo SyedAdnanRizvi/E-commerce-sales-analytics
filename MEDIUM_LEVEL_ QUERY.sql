@@ -1,0 +1,299 @@
+-- -- 1.Find products whose price is greater than the average price of all products.
+-- -- SELECT PRODUCT_ID,
+-- --        PRODUCT_NAME,
+-- --        PRICE
+-- -- FROM PRODUCTS
+-- -- WHERE PRICE > (
+-- --     SELECT AVG(PRICE)
+-- --     FROM PRODUCTS
+-- -- );
+
+-- -- 2.Find customers whose total spending is greater than the average spending per customer.
+
+-- -- SELECT C.CUSTOMER_ID,
+-- --        C.CUSTOMER_NAME,
+-- --        SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_SPENDING
+-- -- FROM CUSTOMERS C
+-- -- JOIN ORDERS O
+-- --     ON C.CUSTOMER_ID = O.CUSTOMER_ID
+-- -- JOIN ORDER_ITEMS OI
+-- --     ON O.ORDER_ID = OI.ORDER_ID
+-- -- GROUP BY C.CUSTOMER_ID, C.CUSTOMER_NAME
+-- -- HAVING SUM(OI.QUANTITY * OI.UNIT_PRICE) > (
+-- --     SELECT AVG(CUSTOMER_SPENDING)
+-- --     FROM (
+-- --         SELECT O.CUSTOMER_ID,
+-- --                SUM(OI.QUANTITY * OI.UNIT_PRICE) AS CUSTOMER_SPENDING
+-- --         FROM ORDERS O
+-- --         JOIN ORDER_ITEMS OI
+-- --             ON O.ORDER_ID = OI.ORDER_ID
+-- --         GROUP BY O.CUSTOMER_ID
+-- --     ) AS CUSTOMER_TOTALS
+-- -- )
+-- -- ORDER BY TOTAL_SPENDING DESC;
+
+-- -- 3.Using a CTE, find products whose total revenue is greater than ₹1,00,000.
+
+-- -- WITH PRODUCT_REVENUE AS (
+-- --     SELECT P.PRODUCT_ID,
+-- --            P.PRODUCT_NAME,
+-- --            SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE
+-- --     FROM PRODUCTS P
+-- --     JOIN ORDER_ITEMS OI
+-- --         ON P.PRODUCT_ID = OI.PRODUCT_ID
+-- --     GROUP BY P.PRODUCT_ID, P.PRODUCT_NAME
+-- -- )
+-- -- SELECT PRODUCT_ID,
+-- --        PRODUCT_NAME,
+-- --        TOTAL_REVENUE
+-- -- FROM PRODUCT_REVENUE
+-- -- WHERE TOTAL_REVENUE > 100000
+-- -- ORDER BY TOTAL_REVENUE DESC;
+
+
+-- -- 4.Classify customers into spending segments:
+
+-- -- SELECT C.CUSTOMER_ID,
+-- --        C.CUSTOMER_NAME,
+-- --        SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_SPENDING,
+-- --        CASE
+-- --            WHEN SUM(OI.QUANTITY * OI.UNIT_PRICE) >= 50000
+-- --                THEN 'High Spender'
+-- --            WHEN SUM(OI.QUANTITY * OI.UNIT_PRICE) >= 20000
+-- --                THEN 'Medium Spender'
+-- --            ELSE 'Low Spender'
+-- --        END AS CUSTOMER_SEGMENT
+-- -- FROM CUSTOMERS C
+-- -- JOIN ORDERS O
+-- --     ON C.CUSTOMER_ID = O.CUSTOMER_ID
+-- -- JOIN ORDER_ITEMS OI
+-- --     ON O.ORDER_ID = OI.ORDER_ID
+-- -- GROUP BY C.CUSTOMER_ID, C.CUSTOMER_NAME
+-- -- ORDER BY TOTAL_SPENDING DESC;
+
+-- -- 5.Find the top 3 products by revenue within each category.
+
+-- -- WITH PRODUCT_REVENUE AS (
+-- --     SELECT C.CATEGORY_NAME,
+-- --            P.PRODUCT_ID,
+-- --            P.PRODUCT_NAME,
+-- --            SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE
+-- --     FROM CATEGORIES C
+-- --     JOIN PRODUCTS P
+-- --         ON C.CATEGORY_ID = P.CATEGORY_ID
+-- --     JOIN ORDER_ITEMS OI
+-- --         ON P.PRODUCT_ID = OI.PRODUCT_ID
+-- --     GROUP BY C.CATEGORY_NAME,
+-- --              P.PRODUCT_ID,
+-- --              P.PRODUCT_NAME
+-- -- ),
+-- -- RANKED_PRODUCTS AS (
+-- --     SELECT *,
+-- --            DENSE_RANK() OVER (
+-- --                PARTITION BY CATEGORY_NAME
+-- --                ORDER BY TOTAL_REVENUE DESC
+-- --            ) AS PRODUCT_RANK
+-- --     FROM PRODUCT_REVENUE
+-- -- )
+-- -- SELECT CATEGORY_NAME,
+-- --        PRODUCT_ID,
+-- --        PRODUCT_NAME,
+-- --        TOTAL_REVENUE,
+-- --        PRODUCT_RANK
+-- -- FROM RANKED_PRODUCTS
+-- -- WHERE PRODUCT_RANK <= 3
+-- -- ORDER BY CATEGORY_NAME, PRODUCT_RANK;
+
+-- -- 6. Previous Month Revenue using LAG()
+
+-- WITH MONTHLY_REVENUE AS (
+--     SELECT DATE_TRUNC('month', O.ORDER_DATE)::DATE AS MONTH,
+--            SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE
+--     FROM ORDERS O
+--     JOIN ORDER_ITEMS OI
+--         ON O.ORDER_ID = OI.ORDER_ID
+--     WHERE O.ORDER_STATUS = 'Completed'
+--     GROUP BY DATE_TRUNC('month', O.ORDER_DATE)::DATE
+-- )
+-- SELECT MONTH,
+--        TOTAL_REVENUE,
+--        LAG(TOTAL_REVENUE) OVER (ORDER BY MONTH) AS PREVIOUS_MONTH_REVENUE
+-- FROM MONTHLY_REVENUE
+-- ORDER BY MONTH;
+
+-- 7.Month-over-Month (MoM) Revenue Growth %
+
+-- WITH MONTHLY_REVENUE AS (
+--     SELECT DATE_TRUNC('month', O.ORDER_DATE)::DATE AS MONTH,
+--            SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE
+--     FROM ORDERS O
+--     JOIN ORDER_ITEMS OI
+--         ON O.ORDER_ID = OI.ORDER_ID
+--     WHERE O.ORDER_STATUS = 'Completed'
+--     GROUP BY DATE_TRUNC('month', O.ORDER_DATE)::DATE
+-- ),
+-- REVENUE_COMPARISON AS (
+--     SELECT MONTH,
+--            TOTAL_REVENUE,
+--            LAG(TOTAL_REVENUE) OVER (ORDER BY MONTH) AS PREVIOUS_REVENUE
+--     FROM MONTHLY_REVENUE
+-- )
+-- SELECT MONTH,
+--        TOTAL_REVENUE,
+--        PREVIOUS_REVENUE,
+--        ROUND(
+--            100.0 * (TOTAL_REVENUE - PREVIOUS_REVENUE)
+--            / NULLIF(PREVIOUS_REVENUE, 0), 2
+--        ) AS MOM_GROWTH_PERCENT
+-- FROM REVENUE_COMPARISON
+-- ORDER BY MONTH;
+
+-- 8.Product-wise Profit
+
+-- SELECT P.PRODUCT_ID,
+--        P.PRODUCT_NAME,
+--        SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE,
+--        SUM(OI.QUANTITY * P.COST_PRICE) AS TOTAL_COST,
+--        SUM(OI.QUANTITY * (OI.UNIT_PRICE - P.COST_PRICE)) AS TOTAL_PROFIT
+-- FROM PRODUCTS P
+-- JOIN ORDER_ITEMS OI
+--     ON P.PRODUCT_ID = OI.PRODUCT_ID
+-- GROUP BY P.PRODUCT_ID, P.PRODUCT_NAME
+-- ORDER BY TOTAL_PROFIT DESC;
+
+-- 9.Repeat Customers — More Than One Order
+-- SELECT C.CUSTOMER_ID,
+--        C.CUSTOMER_NAME,
+--        COUNT(DISTINCT O.ORDER_ID) AS TOTAL_ORDERS
+-- FROM CUSTOMERS C
+-- JOIN ORDERS O
+--     ON C.CUSTOMER_ID = O.CUSTOMER_ID
+-- GROUP BY C.CUSTOMER_ID, C.CUSTOMER_NAME
+-- HAVING COUNT(DISTINCT O.ORDER_ID) > 1
+-- ORDER BY TOTAL_ORDERS DESC;
+
+-- 10.Best-Performing Category
+
+-- SELECT C.CATEGORY_ID,
+--        C.CATEGORY_NAME,
+--        SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE,
+--        SUM(OI.QUANTITY) AS TOTAL_QUANTITY_SOLD,
+--        COUNT(DISTINCT O.ORDER_ID) AS TOTAL_ORDERS
+-- FROM CATEGORIES C
+-- JOIN PRODUCTS P
+--     ON C.CATEGORY_ID = P.CATEGORY_ID
+-- JOIN ORDER_ITEMS OI
+--     ON P.PRODUCT_ID = OI.PRODUCT_ID
+-- JOIN ORDERS O
+--     ON OI.ORDER_ID = O.ORDER_ID
+-- WHERE O.ORDER_STATUS = 'Completed'
+-- GROUP BY C.CATEGORY_ID, C.CATEGORY_NAME
+-- ORDER BY TOTAL_REVENUE DESC
+-- LIMIT 1;
+
+-- 11.Find the second-highest revenue product
+
+-- 	 WITH PRODUCT_REVENUE AS (
+--     SELECT P.PRODUCT_ID,
+--            P.PRODUCT_NAME,
+--            SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE
+--     FROM PRODUCTS P
+--     JOIN ORDER_ITEMS OI
+--         ON P.PRODUCT_ID = OI.PRODUCT_ID
+--     GROUP BY P.PRODUCT_ID, P.PRODUCT_NAME
+-- ),
+-- RANKED_PRODUCTS AS (
+--     SELECT *,
+--            DENSE_RANK() OVER (
+--                ORDER BY TOTAL_REVENUE DESC
+--            ) AS REVENUE_RANK
+--     FROM PRODUCT_REVENUE
+-- )
+-- SELECT PRODUCT_ID,
+--        PRODUCT_NAME,
+--        TOTAL_REVENUE
+-- FROM RANKED_PRODUCTS
+-- WHERE REVENUE_RANK = 2;
+
+-- 12. Find the highest-spending customer in each state
+
+-- WITH CUSTOMER_SPENDING AS (
+--     SELECT C.CUSTOMER_ID,
+--            C.CUSTOMER_NAME,
+--            C.CITY,
+--            SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_SPENDING
+--     FROM CUSTOMERS C
+--     JOIN ORDERS O
+--         ON C.CUSTOMER_ID = O.CUSTOMER_ID
+--     JOIN ORDER_ITEMS OI
+--         ON O.ORDER_ID = OI.ORDER_ID
+--     GROUP BY C.CUSTOMER_ID,
+--              C.CUSTOMER_NAME,
+--              C.CITY
+-- ),
+-- RANKED_CUSTOMERS AS (
+--     SELECT *,
+--            DENSE_RANK() OVER (
+--                PARTITION BY CITY
+--                ORDER BY TOTAL_SPENDING DESC
+--            ) AS CUSTOMER_RANK
+--     FROM CUSTOMER_SPENDING
+-- )
+-- SELECT CITY,
+--        CUSTOMER_ID,
+--        CUSTOMER_NAME,
+--        TOTAL_SPENDING
+-- FROM RANKED_CUSTOMERS
+-- WHERE CUSTOMER_RANK = 1
+-- ORDER BY CITY;
+
+-- -- 13.Find customers who purchased from at least 3 categories
+
+-- SELECT C.CUSTOMER_ID,
+--        C.CUSTOMER_NAME,
+--        COUNT(DISTINCT P.CATEGORY_ID) AS TOTAL_CATEGORIES
+-- FROM CUSTOMERS C
+-- JOIN ORDERS O
+--     ON C.CUSTOMER_ID = O.CUSTOMER_ID
+-- JOIN ORDER_ITEMS OI
+--     ON O.ORDER_ID = OI.ORDER_ID
+-- JOIN PRODUCTS P
+--     ON OI.PRODUCT_ID = P.PRODUCT_ID
+-- GROUP BY C.CUSTOMER_ID, C.CUSTOMER_NAME
+-- HAVING COUNT(DISTINCT P.CATEGORY_ID) >= 3
+-- ORDER BY TOTAL_CATEGORIES DESC;
+
+-- 14.Find categories whose revenue is above average category revenue
+
+-- WITH CATEGORY_REVENUE AS (
+--     SELECT C.CATEGORY_ID,
+--            C.CATEGORY_NAME,
+--            SUM(OI.QUANTITY * OI.UNIT_PRICE) AS TOTAL_REVENUE
+--     FROM CATEGORIES C
+--     JOIN PRODUCTS P
+--         ON C.CATEGORY_ID = P.CATEGORY_ID
+--     JOIN ORDER_ITEMS OI
+--         ON P.PRODUCT_ID = OI.PRODUCT_ID
+--     GROUP BY C.CATEGORY_ID, C.CATEGORY_NAME
+-- )
+-- SELECT CATEGORY_ID,
+--        CATEGORY_NAME,
+--        TOTAL_REVENUE
+-- FROM CATEGORY_REVENUE
+-- WHERE TOTAL_REVENUE > (
+--     SELECT AVG(TOTAL_REVENUE)
+--     FROM CATEGORY_REVENUE
+-- )
+-- ORDER BY TOTAL_REVENUE DESC;
+
+-- 15.Find first and latest order date for each customer
+
+-- SELECT C.CUSTOMER_ID,
+--        C.CUSTOMER_NAME,
+--        MIN(O.ORDER_DATE) AS FIRST_ORDER_DATE,
+--        MAX(O.ORDER_DATE) AS LATEST_ORDER_DATE
+-- FROM CUSTOMERS C
+-- JOIN ORDERS O
+--     ON C.CUSTOMER_ID = O.CUSTOMER_ID
+-- GROUP BY C.CUSTOMER_ID, C.CUSTOMER_NAME
+-- ORDER BY FIRST_ORDER_DATE;
